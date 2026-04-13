@@ -28,12 +28,11 @@
             text-shadow: 3px 3px 0 #FFF;
             z-index: 100;
         }
-        #instructions {
+        #timer {
             position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 24px;
+            top: 20px;
+            left: 20px;
+            font-size: 36px;
             color: #4ECDC4;
             text-shadow: 2px 2px 0 #FFF;
             z-index: 100;
@@ -53,6 +52,16 @@
             display: flex;
             align-items: center;
             justify-content: center;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            color: #4ECDC4;
+            text-shadow: 2px 2px 0 #FFF;
+            z-index: 100;
         }
         .balloon {
             position: absolute;
@@ -93,7 +102,7 @@
             border-radius: 100px;
             opacity: 0.8;
         }
-        #start-screen {
+        #start-screen, #end-screen {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
@@ -104,13 +113,26 @@
             align-items: center;
             z-index: 200;
         }
-        #start-screen h1 {
+        #start-screen h1, #end-screen h1 {
             font-size: 64px;
             color: #FFD93D;
             text-shadow: 4px 4px 0 #FF6B6B;
             margin-bottom: 20px;
+            text-align: center;
         }
-        #start-btn {
+        #end-screen h2 {
+            font-size: 48px;
+            color: #4ECDC4;
+            text-shadow: 3px 3px 0 #FFF;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        #end-screen p {
+            font-size: 36px;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .big-btn {
             font-size: 36px;
             padding: 20px 60px;
             background: #FF6B6B;
@@ -121,11 +143,11 @@
             box-shadow: 0 8px 0 #D94343;
             transition: transform 0.1s, box-shadow 0.1s;
         }
-        #start-btn:hover {
+        .big-btn:hover {
             transform: translateY(2px);
             box-shadow: 0 6px 0 #D94343;
         }
-        #start-btn:active {
+        .big-btn:active {
             transform: translateY(8px);
             box-shadow: 0 0 0 #D94343;
         }
@@ -133,35 +155,45 @@
 </head>
 <body>
     <div id="game-container">
+        <div id="timer">⏰ 3:00</div>
         <div id="score">🎈 0</div>
         <button id="mute-btn">🔊</button>
         <div id="instructions">Click the balloons to pop them!</div>
         <div id="start-screen">
             <h1>🎈 Balloon Pop Party! 🎈</h1>
-            <button id="start-btn">START PLAYING!</button>
+            <button class="big-btn" id="start-btn">START PLAYING!</button>
+        </div>
+        <div id="end-screen" style="display:none;">
+            <h2>Good Game, Bobo!</h2>
+            <p id="final-score">🎈 You popped 0 balloons!</p>
+            <button class="big-btn" id="restart-btn">PLAY AGAIN</button>
         </div>
     </div>
     <script>
         const gameContainer = document.getElementById('game-container');
         const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
         const startScreen = document.getElementById('start-screen');
+        const endScreen = document.getElementById('end-screen');
+        const finalScore = document.getElementById('final-score');
         const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
         const muteBtn = document.getElementById('mute-btn');
         let score = 0;
         let gameRunning = false;
         let spawnInterval;
+        let timerInterval;
+        let timeLeft = 180; // 3 minutes
         let audioContext;
         let isMuted = false;
         const colors = ['#FF6B6B', '#4ECDC4', '#FFD93D', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3'];
         
-        // Initialize audio context on first interaction
         function initAudio() {
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
         }
         
-        // Sound effects using Web Audio API
         function playPopSound() {
             if (isMuted || !audioContext) return;
             const osc = audioContext.createOscillator();
@@ -178,7 +210,7 @@
         
         function playCheerSound() {
             if (isMuted || !audioContext) return;
-            const notes = [523, 659, 784, 1047]; // C major arpeggio
+            const notes = [523, 659, 784, 1047];
             notes.forEach((freq, i) => {
                 const osc = audioContext.createOscillator();
                 const gain = audioContext.createGain();
@@ -208,11 +240,35 @@
             osc.stop(audioContext.currentTime + 0.3);
         }
         
+        function playGameOverSound() {
+            if (isMuted || !audioContext) return;
+            const notes = [523, 392, 330, 262];
+            notes.forEach((freq, i) => {
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                osc.frequency.value = freq;
+                osc.type = 'sine';
+                gain.gain.setValueAtTime(0, audioContext.currentTime + i * 0.15);
+                gain.gain.linearRampToValueAtTime(0.25, audioContext.currentTime + i * 0.15 + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + i * 0.15 + 0.4);
+                osc.start(audioContext.currentTime + i * 0.15);
+                osc.stop(audioContext.currentTime + i * 0.15 + 0.4);
+            });
+        }
+        
         muteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             isMuted = !isMuted;
             muteBtn.textContent = isMuted ? '🔇' : '🔊';
         });
+        
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return '⏰ ' + m + ':' + (s < 10 ? '0' : '') + s;
+        }
         
         function createClouds() {
             for (let i = 0; i < 5; i++) {
@@ -233,7 +289,7 @@
             balloon.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
             balloon.style.left = (Math.random() * (window.innerWidth - 100) + 50) + 'px';
             balloon.style.bottom = '-120px';
-            const speed = 2 + Math.random() * 2 + (score * 0.1);
+            const speed = 2 + Math.random() * 2 + (score * 0.05);
             let position = -120;
             balloon.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -290,16 +346,43 @@
             }, 20);
         }
         
+        function endGame() {
+            gameRunning = false;
+            clearInterval(spawnInterval);
+            clearInterval(timerInterval);
+            playGameOverSound();
+            finalScore.textContent = '🎈 You popped ' + score + ' balloons!';
+            endScreen.style.display = 'flex';
+            // Remove all balloons
+            document.querySelectorAll('.balloon').forEach(b => {
+                if (b.dataset.interval) clearInterval(b.dataset.interval);
+                b.remove();
+            });
+        }
+        
         function startGame() {
             initAudio();
             playStartSound();
             startScreen.style.display = 'none';
+            endScreen.style.display = 'none';
             gameRunning = true;
             score = 0;
+            timeLeft = 180;
             scoreDisplay.textContent = '🎈 0';
+            timerDisplay.textContent = formatTime(timeLeft);
+            
             spawnInterval = setInterval(createBalloon, 1000);
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                timerDisplay.textContent = formatTime(timeLeft);
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
         }
+        
         startBtn.addEventListener('click', startGame);
+        restartBtn.addEventListener('click', startGame);
         createClouds();
     </script>
 </body>
